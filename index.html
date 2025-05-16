@@ -1,22 +1,127 @@
-<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
-<title>NS Island 3D (UMD)</title>
-<script src="https://cdn.jsdelivr.net/npm/babylonjs@6.46.0/babylon.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/babylonjs-loaders@6.46.0/babylonjs.loaders.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/cannon@0.6.2/build/cannon.min.js"></script>
-</head><body style="margin:0"><canvas id="c"></canvas>
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NS-Island Escape 3‑D (Auto‑Fallback, Fixed)</title>
+<style>
+:root{--purple:#9146ff}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#000;color:#fff;font-family:Arial,sans-serif}
+#c{width:100%;height:100%;touch-action:none}
+#hud{position:absolute;top:10px;left:50%;transform:translateX(-50%);text-align:center}
+#hud span{margin:0 8px}
+#touch{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:40px}
+.btn{width:60px;height:60px;border:2px solid #fff;border-radius:50%;display:flex;justify-content:center;align-items:center;background:var(--purple);color:#fff;font-size:26px;opacity:.7}
+@media(hover:hover){#touch{display:none}}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="hud"><span id="score">Coins 0 / 5</span><span id="stage">Stage 1 / 4</span><span id="mode"></span></div>
+<div id="touch"><div class="btn" id="leftBtn">◀</div><div class="btn" id="jumpBtn">⤒</div><div class="btn" id="rightBtn">▶</div></div>
 <script>
-var canvas=document.getElementById('c');
-var engine=new BABYLON.Engine(canvas,true);
-var scene=new BABYLON.Scene(engine);
-scene.enablePhysics(new BABYLON.Vector3(0,-9.81,0),new BABYLON.CannonJSPlugin(true,10,CANNON));
-var camera=new BABYLON.FollowCamera('cam',new BABYLON.Vector3(0,5,-10),scene);
-camera.radius=10;camera.heightOffset=4;camera.attachControl(canvas,true);
-new BABYLON.HemisphericLight('l',new BABYLON.Vector3(0,1,0),scene);
-var ground=BABYLON.MeshBuilder.CreateGround('g',{width:50,height:50},scene);
-ground.physicsImpostor=new BABYLON.PhysicsImpostor(ground,BABYLON.PhysicsImpostor.BoxImpostor,{mass:0},scene);
-var player=BABYLON.MeshBuilder.CreateCapsule('p',{height:2,radius:0.5},scene);
-player.position.y=2;player.physicsImpostor=new BABYLON.PhysicsImpostor(player,BABYLON.PhysicsImpostor.CapsuleImpostor,{mass:1},scene);
-camera.lockedTarget=player;
-engine.runRenderLoop(function(){scene.render();});
-window.addEventListener('resize',function(){engine.resize();});
+function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('fail '+src));document.head.appendChild(s);});}
+
+(async()=>{
+  let BABYLON,CANNON,mode='module';
+  try{
+    BABYLON = await import('https://cdn.jsdelivr.net/npm/babylonjs@6.46.0/+esm');
+    await import('https://cdn.jsdelivr.net/npm/babylonjs-loaders@6.46.0/+esm');
+    CANNON = await import('https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm');
+  }catch(e1){
+    try{
+      mode='umd';
+      await loadScript('https://cdn.jsdelivr.net/npm/babylonjs@6.46.0/babylon.js');
+      await loadScript('https://cdn.jsdelivr.net/npm/babylonjs-loaders@6.46.0/babylonjs.loaders.min.js');
+      await loadScript('https://cdn.jsdelivr.net/npm/cannon@0.6.2/build/cannon.min.js');
+      BABYLON=window.BABYLON;CANNON=window.CANNON;
+    }catch(e2){
+      mode='nophysics';
+      await loadScript('https://cdn.jsdelivr.net/npm/babylonjs@6.46.0/babylon.js');
+      BABYLON=window.BABYLON;CANNON=null;
+    }
+  }
+  document.getElementById('mode').textContent='('+mode+')';
+  startGame(BABYLON,CANNON,mode!=='nophysics');
+})();
+
+function startGame(BABYLON,CANNON,usePhysics){
+  const canvas=document.getElementById('c');
+  const engine=new BABYLON.Engine(canvas,true);
+  const scene=new BABYLON.Scene(engine);
+  if(usePhysics){
+    scene.enablePhysics(new BABYLON.Vector3(0,-9.81,0),new BABYLON.CannonJSPlugin(true,10,CANNON));
+  }
+
+  const camera=new BABYLON.FollowCamera('cam',new BABYLON.Vector3(0,5,-10),scene);
+  camera.radius=10;camera.heightOffset=4;camera.attachControl(canvas,true);
+  new BABYLON.HemisphericLight('light',new BABYLON.Vector3(0,1,0),scene);
+
+  let stage=1,coins=0;
+  const scoreEl=document.getElementById('score'),stageEl=document.getElementById('stage');
+  const updateHUD=()=>{scoreEl.textContent=`Coins ${coins} / 5`;stageEl.textContent=`Stage ${stage} / 4`;};
+
+  const ground=BABYLON.MeshBuilder.CreateGround('ground',{width:60,height:60},scene);
+  ground.material=new BABYLON.StandardMaterial('gm',scene);ground.material.diffuseColor=new BABYLON.Color3(0.08,0.08,0.08);
+  if(usePhysics) ground.physicsImpostor=new BABYLON.PhysicsImpostor(ground,BABYLON.PhysicsImpostor.BoxImpostor,{mass:0},scene);
+
+  const player=BABYLON.MeshBuilder.CreateCapsule('p',{height:2,radius:0.5},scene);
+  player.position.y=2;
+  player.material=new BABYLON.StandardMaterial('pm',scene);player.material.diffuseColor=BABYLON.Color3.FromHexString('#9146ff');
+  camera.lockedTarget=player;
+  if(usePhysics){
+    // ✔ SphereImpostor works with Cannon
+    player.physicsImpostor=new BABYLON.PhysicsImpostor(player,BABYLON.PhysicsImpostor.SphereImpostor,{mass:1,friction:0.6},scene);
+  }else{player.speedX=0;player.velY=0;}
+
+  function buildStage(){
+    scene.meshes.filter(m=>m.name.startsWith('plat')||m.name.startsWith('coin')).forEach(m=>m.dispose());
+    const gap=6,y=2;
+    for(let i=0;i<5;i++){
+      const plat=BABYLON.MeshBuilder.CreateBox('plat'+i,{width:4,height:0.5,depth:4},scene);
+      plat.position.set(i*gap,y,0);
+      plat.material=new BABYLON.StandardMaterial('plm',scene);plat.material.diffuseColor=new BABYLON.Color3(0.15,0.15,0.15);
+      if(usePhysics) plat.physicsImpostor=new BABYLON.PhysicsImpostor(plat,BABYLON.PhysicsImpostor.BoxImpostor,{mass:0},scene);
+
+      const coin=BABYLON.MeshBuilder.CreateCylinder('coin'+i,{diameter:1,height:0.2},scene);
+      coin.position.set(i*gap,y+1.5,0);
+      coin.material=new BABYLON.StandardMaterial('cm',scene);coin.material.diffuseColor=BABYLON.Color3.Yellow();
+
+      if(usePhysics){
+        coin.actionManager=new BABYLON.ActionManager(scene);
+        coin.actionManager.registerAction(new BABYLON.ExecuteCodeAction({trigger:BABYLON.ActionManager.OnIntersectionEnterTrigger,parameter:player},()=>collect(coin)));
+      }
+    }
+    if(!usePhysics) scene.coins=scene.meshes.filter(m=>m.name.startsWith('coin'));
+    coins=0;updateHUD();
+  }
+
+  function collect(c){
+    if(c.isDisposed())return;
+    c.dispose();coins++;updateHUD();if(coins>=5)nextStage();
+  }
+  function nextStage(){
+    if(stage>=4){alert('🏴‍☠️ You escaped NS Island!');stage=0;}
+    stage++;buildStage();player.position.set(0,2,0);
+    if(usePhysics) player.physicsImpostor.setLinearVelocity(new BABYLON.Vector3());
+  }
+  buildStage();
+
+  const input={left:false,right:false,jump:false};
+  window.addEventListener('keydown',e=>{if(e.code==='ArrowLeft')input.left=true;if(e.code==='ArrowRight')input.right=true;if(e.code==='Space')input.jump=true;});
+  window.addEventListener('keyup',e=>{if(e.code==='ArrowLeft')input.left=false;if(e.code==='ArrowRight')input.right=false;if(e.code==='Space')input.jump=false;});
+  [['leftBtn','left'],['rightBtn','right'],['jumpBtn','jump']].forEach(([id,key])=>{const b=document.getElementById(id);b.addEventListener('touchstart',()=>input[key]=true);b.addEventListener('touchend',()=>input[key]=false);});
+
+  engine.runRenderLoop(()=>{
+    if(usePhysics){
+      let vel=player.physicsImpostor.getLinearVelocity();
+      vel.x=input.left?-5:input.right?5:0;
+      if(input.jump&&Math.abs(vel.y)<0.05) vel.y=7;
+      player.physicsImpostor.setLinearVelocity(vel);
+    }else{
+      if(input.left) player.position.x-=0.1;
+      if(input.right) player.position.x+=0.1;
+      player.velY-=0.3;player.position.y+=player.velY*0.016;
+      if(player.position.y<1){player.position.y=1;player.velY=0;if(input.jump) player.velY=0.18;}
+      scene.coins&&scene.coins.forEach(c=>{if(!c.isDisposed()&&BABYLON.Vector3.Distance(c.position,player.position)<1)collect(c);});
+    }
+    scene.render();
+  });
+  window.addEventListener('resize',()=>engine.resize());
+}
 </script></body></html>
