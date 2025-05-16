@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NS-Island Escape</title>
+    <!-- Phaser CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+    <style>
+      :root { --purple: #9146ff; }
+      html, body {
+        margin: 0; padding: 0;
+        background: #000; color: #fff;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #game-container { width: 100vw; height: 100vh; overflow: hidden; }
+      canvas { outline: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="game-container"></div>
+
+    <script>
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+      const logoURL = "https://dummyimage.com/256x128/9146ff/ffffff&text=NS+Island";
+
+      const sharedStyles = {
+        fontFamily: "Arial",
+        fontSize: 24,
+        color: "#FFFFFF",
+        align: "center",
+      };
+
+      class BootScene extends Phaser.Scene {
+        constructor() { super("boot"); }
+        preload() { this.load.image("logo", logoURL); }
+        create() { this.scene.start("menu"); }
+      }
+
+      class MenuScene extends Phaser.Scene {
+        constructor() { super("menu"); }
+        create() {
+          this.add.image(W / 2, H / 3, "logo").setScale(0.5);
+          this.add.text(W / 2, H / 2, "NS-Island Escape", {...sharedStyles, fontSize: 32, color: "var(--purple)"}).setOrigin(0.5);
+          this.add.text(W / 2, (H * 2) / 3, "Tap to Start", sharedStyles)
+              .setOrigin(0.5)
+              .setInteractive({ useHandCursor: true })
+              .on("pointerdown", () => this.scene.start("burn"));
+        }
+      }
+
+      function addNextButton(scene, nextKey) {
+        scene.add.text(W - 80, H - 40, "▶", { fontSize: 48, color: "var(--purple)" })
+              .setInteractive({ useHandCursor: true })
+              .on("pointerdown", () => scene.scene.start(nextKey));
+      }
+
+      class BurnScene extends Phaser.Scene {
+        constructor() { super("burn"); }
+        create() {
+          this.taps = 0; this.target = 50;
+          this.add.text(W / 2, H / 2 - 60, "BURN! Tap fast to exercise", sharedStyles).setOrigin(0.5);
+          this.counterText = this.add.text(W / 2, H / 2, "0 / " + this.target, {...sharedStyles, fontSize: 48, color: "var(--purple)"}).setOrigin(0.5);
+          this.input.on("pointerdown", () => { this.taps++; this.counterText.setText(this.taps + " / " + this.target); if (this.taps >= this.target) this.success(); });
+        }
+        success() {
+          this.add.text(W / 2, H / 2 + 80, "Success!", sharedStyles).setOrigin(0.5);
+          addNextButton(this, "learn");
+        }
+      }
+
+      class LearnScene extends Phaser.Scene {
+        constructor() { super("learn"); }
+        init(data){ this.index = data.index||0; this.correct = data.correct||0; }
+        create() {
+          this.questions = [
+            {q: "What does GPT stand for?", options: ["Generative Pre-trained Transformer","GPU Processing Thread"], a:0},
+            {q: "Which is more important in VibeCoding?", options: ["Knowing English","Knowing C++"], a:0},
+            {q: "Traditional Malay dance?", options: ["Bharatanatyam","Zapin"], a:1},
+          ];
+          if(this.index>=this.questions.length) return this.finish();
+          const {q,options} = this.questions[this.index];
+          this.cameras.main.setBackgroundColor(0x000000);
+          this.add.text(W/2,100,q,sharedStyles).setWordWrapWidth(W-40).setOrigin(0.5);
+          options.forEach((opt,i)=>{
+            this.add.text(W/2,200+i*60,opt,{...sharedStyles,backgroundColor:"#222",padding:{x:10,y:5}})
+                .setOrigin(0.5).setInteractive({useHandCursor:true})
+                .on("pointerdown",()=>this.checkAnswer(i));
+          });
+        }
+        checkAnswer(choice){ if(choice===this.questions[this.index].a)this.correct++; this.index++; this.scene.restart({index:this.index,correct:this.correct}); }
+        finish(){ if(this.correct>=2){ this.add.text(W/2,H/2,"You passed the quiz!",sharedStyles).setOrigin(0.5); addNextButton(this,"earn"); } else { this.add.text(W/2,H/2,"Try again!",sharedStyles).setOrigin(0.5); addNextButton(this,"learn"); } }
+      }
+
+      class EarnScene extends Phaser.Scene {
+        constructor(){super("earn");}
+        create(){
+          this.coins=0;const target=21;
+          this.add.text(W/2,H/2-60,"EARN! Mine 21 satoshis",sharedStyles).setOrigin(0.5);
+          const rock=this.add.rectangle(W/2,H/2,150,150,0x9146ff).setInteractive({useHandCursor:true});
+          this.counter=this.add.text(W/2,H/2+100,"0 / "+target,{...sharedStyles,fontSize:48}).setOrigin(0.5);
+          rock.on("pointerdown",()=>{this.coins++;this.counter.setText(this.coins+" / "+target);if(this.coins>=target)this.success();});
+        }
+        success(){ this.add.text(W/2,H/2+160,"Rich!",sharedStyles).setOrigin(0.5); addNextButton(this,"sleep"); }
+      }
+
+      class SleepScene extends Phaser.Scene {
+        constructor(){super("sleep");}
+        create(){
+          this.add.text(W/2,H/2-60,"SLEEP 8s or Bryan haunts you",sharedStyles).setOrigin(0.5);
+          const btn=this.add.rectangle(W/2,H/2+20,200,60,0x222222).setInteractive();
+          this.add.text(W/2,H/2+20,"Hold to Sleep",sharedStyles).setOrigin(0.5);
+          this.timer=0; btn.on("pointerdown",()=>{this.hold=true;}); btn.on("pointerup",()=>{this.hold=false;if(this.timer<8000)this.fail();});
+        }
+        update(_,delta){ if(this.hold){ this.timer+=delta; if(this.timer>=8000)this.success(); } }
+        fail(){ this.add.text(W/2,H/2+100,"Bryan's Ghost! Try again",sharedStyles).setOrigin(0.5); addNextButton(this,"sleep"); this.scene.pause();}
+        success(){ this.add.text(W/2,H/2+100,"Well-rested!",sharedStyles).setOrigin(0.5); addNextButton(this,"end"); this.scene.pause();}
+      }
+
+      class EndScene extends Phaser.Scene {
+        constructor(){super("end");}
+        create(){
+          this.cameras.main.setBackgroundColor(0x000000);
+          this.add.text(W/2,H/2-40,"🏴‍☠️  You Escaped NS Island!",{...sharedStyles,fontSize:32,color:"var(--purple)"}).setOrigin(0.5);
+          this.add.text(W/2,H/2+40,"Share the link & play again",sharedStyles).setOrigin(0.5);
+          addNextButton(this,"menu");
+        }
+      }
+
+      const config={type:Phaser.AUTO,width:W,height:H,parent:"game-container",backgroundColor:"#000000",scene:[BootScene,MenuScene,BurnScene,LearnScene,EarnScene,SleepScene,EndScene]};
+      new Phaser.Game(config);
+    </script>
+  </body>
+</html>
