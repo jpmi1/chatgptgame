@@ -3,135 +3,77 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>NS-Island Escape</title>
-    <!-- Phaser CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+    <title>NS-Island Escape 3-D</title>
+    <!-- Babylon.js & Cannon.js -->
+    <script src="https://cdn.jsdelivr.net/npm/babylonjs@6.46.0/babylon.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/babylonjs-loaders@6.46.0/babylonjs.loaders.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"></script>
     <style>
       :root { --purple: #9146ff; }
-      html, body {
-        margin: 0; padding: 0;
-        background: #000; color: #fff;
-        font-family: 'Helvetica Neue', Arial, sans-serif;
-        user-select: none;
-        -webkit-tap-highlight-color: transparent;
-      }
-      #game-container { width: 100vw; height: 100vh; overflow: hidden; }
-      canvas { outline: none !important; }
+      html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#000;color:#fff;font-family:Arial,sans-serif;}
+      #renderCanvas{width:100%;height:100%;touch-action:none;}
+      #hud{position:absolute;top:10px;left:50%;transform:translateX(-50%);text-align:center;}
+      #hud span{margin:0 5px;}
+      #mobileControls{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:40px;}
+      .btn{width:60px;height:60px;border:2px solid #fff;border-radius:50%;display:flex;justify-content:center;align-items:center;color:#fff;font-size:24px;background:var(--purple);opacity:.7;}
+      @media(hover:hover){#mobileControls{display:none;}}
     </style>
   </head>
   <body>
-    <div id="game-container"></div>
-
+    <canvas id="renderCanvas"></canvas>
+    <div id="hud"><span id="score">Coins 0 / 5</span><span id="stage">Stage 1 / 4</span></div>
+    <div id="mobileControls">
+      <div class="btn" id="leftBtn">◀</div>
+      <div class="btn" id="jumpBtn">⤒</div>
+      <div class="btn" id="rightBtn">▶</div>
+    </div>
     <script>
-      const W = window.innerWidth;
-      const H = window.innerHeight;
-      const logoURL = "https://dummyimage.com/256x128/9146ff/ffffff&text=NS+Island";
-
-      const sharedStyles = {
-        fontFamily: "Arial",
-        fontSize: 24,
-        color: "#FFFFFF",
-        align: "center",
-      };
-
-      class BootScene extends Phaser.Scene {
-        constructor() { super("boot"); }
-        preload() { this.load.image("logo", logoURL); }
-        create() { this.scene.start("menu"); }
+      const canvas=document.getElementById('renderCanvas');
+      const engine=new BABYLON.Engine(canvas,true);
+      let stage=1,coinsCollected=0,scene,player,input={left:false,right:false,jump:false};
+      function createScene(){
+        scene=new BABYLON.Scene(engine);
+        scene.clearColor=new BABYLON.Color4(0,0,0,1);
+        scene.enablePhysics(new BABYLON.Vector3(0,-9.81,0),new BABYLON.CannonJSPlugin());
+        const camera=new BABYLON.FollowCamera('cam',new BABYLON.Vector3(0,5,-10),scene);
+        camera.radius=10;camera.heightOffset=4;camera.attachControl(canvas,true);
+        new BABYLON.HemisphericLight('light',new BABYLON.Vector3(0,1,0),scene);
+        const ground=BABYLON.MeshBuilder.CreateGround('ground',{width:50,height:50},scene);
+        ground.material=new BABYLON.StandardMaterial('gm',scene);ground.material.diffuseColor=new BABYLON.Color3(0.05,0.05,0.05);
+        ground.physicsImpostor=new BABYLON.PhysicsImpostor(ground,BABYLON.PhysicsImpostor.BoxImpostor,{mass:0},scene);
+        player=BABYLON.MeshBuilder.CreateCapsule('player',{height:2,radius:0.5},scene);
+        player.position.y=2;player.material=new BABYLON.StandardMaterial('pm',scene);player.material.diffuseColor=BABYLON.Color3.FromHexString('#9146ff');
+        player.physicsImpostor=new BABYLON.PhysicsImpostor(player,BABYLON.PhysicsImpostor.CapsuleImpostor,{mass:1,restitution:0.1,friction:0.6},scene);
+        camera.lockedTarget=player;
+        buildStage(stage);
+        return scene;
       }
-
-      class MenuScene extends Phaser.Scene {
-        constructor() { super("menu"); }
-        create() {
-          this.add.image(W / 2, H / 3, "logo").setScale(0.5);
-          this.add.text(W / 2, H / 2, "NS-Island Escape", {...sharedStyles, fontSize: 32, color: "var(--purple)"}).setOrigin(0.5);
-          this.add.text(W / 2, (H * 2) / 3, "Tap to Start", sharedStyles)
-              .setOrigin(0.5)
-              .setInteractive({ useHandCursor: true })
-              .on("pointerdown", () => this.scene.start("burn"));
+      function buildStage(n){
+        const gap=5,y=2;
+        for(let i=0;i<5;i++){
+          const plat=BABYLON.MeshBuilder.CreateBox('plat'+i,{width:4,height:0.5,depth:4},scene);
+          plat.position.set(i*gap,y,0);
+          plat.material=new BABYLON.StandardMaterial('plm',scene);plat.material.diffuseColor=new BABYLON.Color3(0.15,0.15,0.15);
+          plat.physicsImpostor=new BABYLON.PhysicsImpostor(plat,BABYLON.PhysicsImpostor.BoxImpostor,{mass:0},scene);
+          const coin=BABYLON.MeshBuilder.CreateCylinder('coin'+i,{diameter:1,height:0.2},scene);
+          coin.position.set(i*gap,y+1.5,0);
+          coin.material=new BABYLON.StandardMaterial('cm',scene);coin.material.diffuseColor=BABYLON.Color3.Yellow();
+          coin.rotate(BABYLON.Axis.Y,Math.PI/4,scene);
+          coin.actionManager=new BABYLON.ActionManager(scene);
+          coin.actionManager.registerAction(new BABYLON.ExecuteCodeAction({trigger:BABYLON.ActionManager.OnIntersectionEnterTrigger,parameter:player},()=>{
+            if(!coin.isDisposed()){coin.dispose();coinsCollected++;updateHUD();if(coinsCollected>=5)nextStage();}});
+          );
         }
       }
-
-      function addNextButton(scene, nextKey) {
-        scene.add.text(W - 80, H - 40, "▶", { fontSize: 48, color: "var(--purple)" })
-              .setInteractive({ useHandCursor: true })
-              .on("pointerdown", () => scene.scene.start(nextKey));
-      }
-
-      class BurnScene extends Phaser.Scene {
-        constructor() { super("burn"); }
-        create() {
-          this.taps = 0; this.target = 50;
-          this.add.text(W / 2, H / 2 - 60, "BURN! Tap fast to exercise", sharedStyles).setOrigin(0.5);
-          this.counterText = this.add.text(W / 2, H / 2, "0 / " + this.target, {...sharedStyles, fontSize: 48, color: "var(--purple)"}).setOrigin(0.5);
-          this.input.on("pointerdown", () => { this.taps++; this.counterText.setText(this.taps + " / " + this.target); if (this.taps >= this.target) this.success(); });
-        }
-        success() {
-          this.add.text(W / 2, H / 2 + 80, "Success!", sharedStyles).setOrigin(0.5);
-          addNextButton(this, "learn");
-        }
-      }
-
-      class LearnScene extends Phaser.Scene {
-        constructor() { super("learn"); }
-        init(data){ this.index = data.index||0; this.correct = data.correct||0; }
-        create() {
-          this.questions = [
-            {q: "What does GPT stand for?", options: ["Generative Pre-trained Transformer","GPU Processing Thread"], a:0},
-            {q: "Which is more important in VibeCoding?", options: ["Knowing English","Knowing C++"], a:0},
-            {q: "Traditional Malay dance?", options: ["Bharatanatyam","Zapin"], a:1},
-          ];
-          if(this.index>=this.questions.length) return this.finish();
-          const {q,options} = this.questions[this.index];
-          this.cameras.main.setBackgroundColor(0x000000);
-          this.add.text(W/2,100,q,sharedStyles).setWordWrapWidth(W-40).setOrigin(0.5);
-          options.forEach((opt,i)=>{
-            this.add.text(W/2,200+i*60,opt,{...sharedStyles,backgroundColor:"#222",padding:{x:10,y:5}})
-                .setOrigin(0.5).setInteractive({useHandCursor:true})
-                .on("pointerdown",()=>this.checkAnswer(i));
-          });
-        }
-        checkAnswer(choice){ if(choice===this.questions[this.index].a)this.correct++; this.index++; this.scene.restart({index:this.index,correct:this.correct}); }
-        finish(){ if(this.correct>=2){ this.add.text(W/2,H/2,"You passed the quiz!",sharedStyles).setOrigin(0.5); addNextButton(this,"earn"); } else { this.add.text(W/2,H/2,"Try again!",sharedStyles).setOrigin(0.5); addNextButton(this,"learn"); } }
-      }
-
-      class EarnScene extends Phaser.Scene {
-        constructor(){super("earn");}
-        create(){
-          this.coins=0;const target=21;
-          this.add.text(W/2,H/2-60,"EARN! Mine 21 satoshis",sharedStyles).setOrigin(0.5);
-          const rock=this.add.rectangle(W/2,H/2,150,150,0x9146ff).setInteractive({useHandCursor:true});
-          this.counter=this.add.text(W/2,H/2+100,"0 / "+target,{...sharedStyles,fontSize:48}).setOrigin(0.5);
-          rock.on("pointerdown",()=>{this.coins++;this.counter.setText(this.coins+" / "+target);if(this.coins>=target)this.success();});
-        }
-        success(){ this.add.text(W/2,H/2+160,"Rich!",sharedStyles).setOrigin(0.5); addNextButton(this,"sleep"); }
-      }
-
-      class SleepScene extends Phaser.Scene {
-        constructor(){super("sleep");}
-        create(){
-          this.add.text(W/2,H/2-60,"SLEEP 8s or Bryan haunts you",sharedStyles).setOrigin(0.5);
-          const btn=this.add.rectangle(W/2,H/2+20,200,60,0x222222).setInteractive();
-          this.add.text(W/2,H/2+20,"Hold to Sleep",sharedStyles).setOrigin(0.5);
-          this.timer=0; btn.on("pointerdown",()=>{this.hold=true;}); btn.on("pointerup",()=>{this.hold=false;if(this.timer<8000)this.fail();});
-        }
-        update(_,delta){ if(this.hold){ this.timer+=delta; if(this.timer>=8000)this.success(); } }
-        fail(){ this.add.text(W/2,H/2+100,"Bryan's Ghost! Try again",sharedStyles).setOrigin(0.5); addNextButton(this,"sleep"); this.scene.pause();}
-        success(){ this.add.text(W/2,H/2+100,"Well-rested!",sharedStyles).setOrigin(0.5); addNextButton(this,"end"); this.scene.pause();}
-      }
-
-      class EndScene extends Phaser.Scene {
-        constructor(){super("end");}
-        create(){
-          this.cameras.main.setBackgroundColor(0x000000);
-          this.add.text(W/2,H/2-40,"🏴‍☠️  You Escaped NS Island!",{...sharedStyles,fontSize:32,color:"var(--purple)"}).setOrigin(0.5);
-          this.add.text(W/2,H/2+40,"Share the link & play again",sharedStyles).setOrigin(0.5);
-          addNextButton(this,"menu");
-        }
-      }
-
-      const config={type:Phaser.AUTO,width:W,height:H,parent:"game-container",backgroundColor:"#000000",scene:[BootScene,MenuScene,BurnScene,LearnScene,EarnScene,SleepScene,EndScene]};
-      new Phaser.Game(config);
+      function updateHUD(){document.getElementById('score').textContent=`Coins ${coinsCollected} / 5`;document.getElementById('stage').textContent=`Stage ${stage} / 4`;}
+      function nextStage(){if(stage>=4){victory();return;}stage++;coinsCollected=0;scene.meshes.filter(m=>m.name.startsWith('plat')||m.name.startsWith('coin')).forEach(m=>m.dispose());buildStage(stage);updateHUD();player.physicsImpostor.setLinearVelocity(new BABYLON.Vector3());player.position=new BABYLON.Vector3(0,2,0);}
+      function victory(){alert('🏴‍☠️ You escaped NS Island in 3-D!');stage=1;coinsCollected=0;nextStage();}
+      window.addEventListener('keydown',e=>{if(e.code==='ArrowLeft')input.left=true;if(e.code==='ArrowRight')input.right=true;if(e.code==='Space')input.jump=true;});
+      window.addEventListener('keyup',e=>{if(e.code==='ArrowLeft')input.left=false;if(e.code==='ArrowRight')input.right=false;if(e.code==='Space')input.jump=false;});
+      [['leftBtn','left'],['rightBtn','right'],['jumpBtn','jump']].forEach(([id,key])=>{const btn=document.getElementById(id);btn.addEventListener('touchstart',()=>input[key]=true);btn.addEventListener('touchend',()=>input[key]=false);});
+      engine.runRenderLoop(()=>{if(scene){let vel=player.physicsImpostor.getLinearVelocity();if(input.left)vel.x=-5;else if(input.right)vel.x=5;else vel.x=0;if(input.jump&&Math.abs(vel.y)<0.05)vel.y=7;player.physicsImpostor.setLinearVelocity(vel);scene.render();}});
+      window.addEventListener('resize',()=>engine.resize());
+      createScene();updateHUD();
     </script>
   </body>
 </html>
