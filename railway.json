@@ -1,14 +1,1 @@
-{
-  "build": {
-    "command": "",
-    "env": {}
-  },
-  "deploy": {
-    "command": "",
-    "env": {}
-  },
-  "static": {
-    "publish": "./",
-    "root": "./"
-  }
-}
+{"static": {"publish": "./", "root": "./"}}
